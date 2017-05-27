@@ -79,11 +79,15 @@ update msg model =
       Click point ->
          case getTile point model.board of
             Just tile ->
-               case tile of
-                  Empty              -> model
+               case Debug.log "selected tile" tile of
+                  Empty              -> model |> clear
                   PossibleMovement   -> model
+                                          |> handleBlobMovement point
+                                          |> clear
                   Selected blob      -> model
-                  Unselected blob    -> model |> handleBlobSelection point
+                  Unselected blob    -> model
+                                          |> clear
+                                          |> handleBlobSelection point
             Nothing -> Debug.log "This should never happend!!!" model
 
 getTile : Point -> Board -> Maybe Tile
@@ -96,6 +100,32 @@ getTile point board =
          Just cols   -> List.head (List.drop col cols)
          Nothing     -> Nothing
 
+clear : Model -> Model
+clear model =
+   { model |
+     board = model.board
+                   |> transformTiles possibleMovementToEmpty
+                   |> transformTiles selectedToUnselected,
+     selected = Nothing
+   }
+
+transformTiles : (Tile -> Tile) -> Board -> Board
+transformTiles transform board =
+   List.map (\tiles -> List.map transform tiles) board
+
+possibleMovementToEmpty : Tile -> Tile
+possibleMovementToEmpty tile =
+   case tile of
+      PossibleMovement -> Empty
+      _ -> tile
+
+selectedToUnselected : Tile -> Tile
+selectedToUnselected tile =
+   case tile of
+      Selected Blue -> Unselected Blue
+      Selected Red -> Unselected Red
+      _ -> tile
+
 handleBlobSelection : Point -> Model -> Model
 handleBlobSelection point model =
   let
@@ -106,46 +136,109 @@ handleBlobSelection point model =
       (Just (Unselected Blue), BlueTurn) -> updateModelOnSelection point model
       (_, _)             -> model
 
+handleBlobMovement : Point -> Model -> Model
+handleBlobMovement point model =
+  let
+    selectedPoint =
+      case model.selected of
+        Just p -> p
+        Nothing -> Debug.log "This should never happend!!!" (0, 0)
+    tile = unwrapTile (getTile selectedPoint model.board)
+  in
+    case model.selected of
+      Nothing -> model |> clear
+      Just lastSelectedpoint ->
+        {  model |
+           board = model.board
+                     |> updateLastSelection lastSelectedpoint point tile
+                     |> swap lastSelectedpoint point,
+           selected = Nothing
+        }
+
+swap : Point -> Point -> Board -> Board
+swap p1 p2 board =
+  let
+    tile1 = unwrapTile (getTile p1 board)
+    tile2 = unwrapTile (getTile p2 board)
+    update row col tile =
+      if (row, col) == p1 then
+        tile2
+      else if (row, col) == p2 then
+        tile1
+      else
+        tile
+  in
+    List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+
+updateLastSelection : Point -> Point -> Tile -> Board -> Board
+updateLastSelection p1 p2 originalTile board =
+  let
+    distance = calculateDistance p1 p2
+    update row col tile =
+      if (row, col) == p2 then
+        if distance == 2 then
+          Empty
+        else
+          originalTile
+      else
+        tile
+  in
+    List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+
+unwrapTile : Maybe Tile -> Tile
+unwrapTile maybeTile =
+  case maybeTile of
+    Just (Unselected Blue) -> Unselected Blue
+    Just (Unselected Red) -> Unselected Red
+    Just (Selected Blue) -> Selected Blue
+    Just (Selected Red) -> Selected Red
+    Just Empty -> Empty
+    Just PossibleMovement -> PossibleMovement
+    Nothing -> Empty
+
 updateModelOnSelection : Point -> Model -> Model
 updateModelOnSelection point model =
   let
-    updateBoard board =
-      board
-        |> updateBlob point selectTile
+      selectBoard board =
+         board
+            |> updateBlob point selectTile
+            |> updateMovements point showMovement
+      unselectboard lastSelectedpoint board =
+         board
+            |> updateBlob lastSelectedpoint unselectTile
+            |> updateMovements lastSelectedpoint unshowMovement
   in
     case model.selected of
-      Nothing    ->
+      Nothing ->
         {  model |
-           board = updateBoard model.board,
+           board = selectBoard model.board,
            selected = Just point
         }
-      Just blobPoint ->
+      Just lastSelectedpoint ->
         {  model |
-           board = (updateBoard model.board)
-                          |> updateBlob blobPoint unselectTile,
+           board = model.board
+                     |> unselectboard lastSelectedpoint
+                     |> selectBoard,
            selected = Just point
         }
 
--- updateMovements : Maybe Blob -> (Tile -> Tile) -> Board -> Board
--- updateMovements optionalBlolb transform board =
---    case optionalBlob of
---       Just blob ->
---          let
---             point = extractPointFromBlob blob
---          in
---             List.map (\ tiles ->
---                List.map (\ tile ->
---                   let
---                      tilePoint = extractPointFromTile tile
---                      distance = calculateDistance point tilePoint
---                   in
---                      if isSamePosition point tilePoint then
---                         transform tile
---                      else
---                         tile
---                ) tiles
---             ) board
---       Nothing -> board
+updateMovements : Point -> (Tile -> Tile) -> Board -> Board
+updateMovements point transform board =
+   let
+      update row col tile =
+         if isOnMoveRange point (row, col) then
+            transform tile
+         else
+            tile
+   in
+      List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+
+isOnMoveRange : Point -> Point -> Bool
+isOnMoveRange p1 p2 =
+   let
+      distance = calculateDistance p1 p2
+   in
+      distance == 1 || distance == 2
 
 -- Actualiza la blob dada en el tablero, aplicando la funciona dada.
 updateBlob : Point -> (Tile -> Tile) -> Board -> Board
@@ -153,7 +246,7 @@ updateBlob point transform board =
    let
       update row col tile =
         if point == (row, col) then
-           transform tile
+            transform tile
         else
            tile
    in
@@ -169,6 +262,18 @@ unselectTile : Tile -> Tile
 unselectTile tile =
    case tile of
       Selected blob -> Unselected blob
+      _ -> tile
+
+showMovement : Tile -> Tile
+showMovement tile =
+   case tile of
+      Empty -> PossibleMovement
+      _ -> tile
+
+unshowMovement : Tile -> Tile
+unshowMovement tile =
+   case tile of
+      PossibleMovement -> Empty
       _ -> tile
 
 calculateDistance : Point -> Point -> Distance
