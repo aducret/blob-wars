@@ -12,6 +12,12 @@ main = Html.beginnerProgram
 
 -- MODEL
 
+type alias Transform a b= a -> b
+
+type alias IndexedTransform a b= Row -> Col -> a -> b
+
+type alias Matrix a = List(List(a))
+
 type alias Row = Int
 
 type alias Col = Int
@@ -104,14 +110,18 @@ clear : Model -> Model
 clear model =
    { model |
      board = model.board
-                   |> transformTiles possibleMovementToEmpty
-                   |> transformTiles selectedToUnselected,
+                   |> matrixMap possibleMovementToEmpty
+                   |> matrixMap selectedToUnselected,
      selected = Nothing
    }
 
-transformTiles : (Tile -> Tile) -> Board -> Board
-transformTiles transform board =
+matrixMap : Transform a b -> Matrix a -> Matrix b
+matrixMap transform board =
    List.map (\tiles -> List.map transform tiles) board
+
+matrixIndexedMap : IndexedTransform a b -> Matrix a -> Matrix b
+matrixIndexedMap transform board =
+    List.indexedMap (\row tiles -> List.indexedMap (transform row) tiles) board
 
 possibleMovementToEmpty : Tile -> Tile
 possibleMovementToEmpty tile =
@@ -165,7 +175,7 @@ stainArea point turn board =
       else
         tile
   in
-    List.indexedMap (\row tiles -> List.indexedMap (stain row) tiles) board
+    matrixIndexedMap stain board
 
 stainTile : Turn -> Tile -> Tile
 stainTile turn tile =
@@ -186,7 +196,7 @@ swap p1 p2 board =
   let
     tile1 = unwrapTile (getTile p1 board)
     tile2 = unwrapTile (getTile p2 board)
-    update row col tile =
+    swapTransform row col tile =
       if (row, col) == p1 then
         tile2
       else if (row, col) == p2 then
@@ -194,7 +204,7 @@ swap p1 p2 board =
       else
         tile
   in
-    List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+    matrixIndexedMap swapTransform board
 
 updateLastSelection : Point -> Point -> Tile -> Board -> Board
 updateLastSelection p1 p2 originalTile board =
@@ -209,7 +219,7 @@ updateLastSelection p1 p2 originalTile board =
       else
         tile
   in
-    List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+    matrixIndexedMap update board
 
 unwrapTile : Maybe Tile -> Tile
 unwrapTile maybeTile =
@@ -257,7 +267,7 @@ updateMovements point transform board =
          else
             tile
    in
-      List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+      matrixIndexedMap update board
 
 isOnMoveRange : Point -> Point -> Bool
 isOnMoveRange p1 p2 =
@@ -276,7 +286,7 @@ updateBlob point transform board =
         else
            tile
    in
-      List.indexedMap (\row tiles -> List.indexedMap (update row) tiles) board
+      matrixIndexedMap update board
 
 selectTile : Tile -> Tile
 selectTile tile =
@@ -332,18 +342,18 @@ turnToHtml turn =
 
 boardToHtml : List(List(Tile)) -> List(Html Msg)
 boardToHtml board =
-   List.indexedMap (\x tiles ->
-      tr [] (List.indexedMap (\y tile ->
-               case tile of
-                  Empty            -> td [onClick (Click (x, y))] [text "X"]
-                  PossibleMovement -> td [onClick (Click (x, y))] [text "o"]
-                  Unselected blob ->
-                     case blob of
-                        Red        -> td [onClick (Click (x, y))] [text "r"]
-                        Blue       -> td [onClick (Click (x, y))] [text "b"]
-                  Selected blob ->
-                     case blob of
-                        Red        -> td [onClick (Click (x, y))] [text "R"]
-                        Blue       -> td [onClick (Click (x, y))] [text "B"]
-            ) tiles)
-   ) board
+  let
+    update row col tile =
+      case tile of
+         Empty            -> td [onClick (Click (row, col))] [text "X"]
+         PossibleMovement -> td [onClick (Click (row, col))] [text "o"]
+         Unselected blob ->
+            case blob of
+               Red        -> td [onClick (Click (row, col))] [text "r"]
+               Blue       -> td [onClick (Click (row, col))] [text "b"]
+         Selected blob ->
+            case blob of
+               Red        -> td [onClick (Click (row, col))] [text "R"]
+               Blue       -> td [onClick (Click (row, col))] [text "B"]
+  in
+    List.map (\tiles -> tr [] tiles) (matrixIndexedMap update board)
