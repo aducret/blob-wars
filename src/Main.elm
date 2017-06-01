@@ -151,9 +151,35 @@ handleBlobMovement point model =
         {  model |
            board = model.board
                      |> updateLastSelection lastSelectedpoint point tile
-                     |> swap lastSelectedpoint point,
+                     |> swap lastSelectedpoint point
+                     |> stainArea point model.turn,
            selected = Nothing
         }
+
+stainArea : Point -> Turn -> Board -> Board
+stainArea point turn board =
+  let
+    stain row col tile =
+      if calculateDistance point (row, col) == 1 then
+        stainTile turn tile
+      else
+        tile
+  in
+    List.indexedMap (\row tiles -> List.indexedMap (stain row) tiles) board
+
+stainTile : Turn -> Tile -> Tile
+stainTile turn tile =
+  case turn of
+    RedTurn   ->
+      case tile of
+        Unselected Blue -> Unselected Red
+        Selected Blue -> Selected Red
+        _ -> tile
+    BlueTurn  ->
+      case tile of
+        Unselected Red -> Unselected Blue
+        Selected Red -> Selected Blue
+        _ -> tile
 
 swap : Point -> Point -> Board -> Board
 swap p1 p2 board =
