@@ -163,8 +163,15 @@ handleBlobMovement point model =
                      |> updateLastSelection lastSelectedpoint point tile
                      |> swap lastSelectedpoint point
                      |> stainArea point model.turn,
-           selected = Nothing
+           selected = Nothing,
+           turn = changeTurn model.turn
         }
+
+changeTurn : Turn -> Turn
+changeTurn turn =
+  case turn of
+    RedTurn -> BlueTurn
+    BlueTurn -> RedTurn
 
 stainArea : Point -> Turn -> Board -> Board
 stainArea point turn board =
