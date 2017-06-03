@@ -1564,8 +1564,7 @@ function toString(v)
 	var type = typeof v;
 	if (type === 'function')
 	{
-		var name = v.func ? v.func.name : v.name;
-		return '<function' + (name === '' ? '' : ':') + name + '>';
+		return '<function>';
 	}
 
 	if (type === 'boolean')
@@ -2072,6 +2071,13 @@ var _elm_lang$core$List$sortWith = _elm_lang$core$Native_List.sortWith;
 var _elm_lang$core$List$sortBy = _elm_lang$core$Native_List.sortBy;
 var _elm_lang$core$List$sort = function (xs) {
 	return A2(_elm_lang$core$List$sortBy, _elm_lang$core$Basics$identity, xs);
+};
+var _elm_lang$core$List$singleton = function (value) {
+	return {
+		ctor: '::',
+		_0: value,
+		_1: {ctor: '[]'}
+	};
 };
 var _elm_lang$core$List$drop = F2(
 	function (n, list) {
@@ -3520,15 +3526,8 @@ function setupIncomingPort(name, callback)
 		sentBeforeInit.push(value);
 	}
 
-	function postInitSend(incomingValue)
+	function postInitSend(value)
 	{
-		var result = A2(_elm_lang$core$Json_Decode$decodeValue, converter, incomingValue);
-		if (result.ctor === 'Err')
-		{
-			throw new Error('Trying to send an unexpected type of value through port `' + name + '`:\n' + result._0);
-		}
-
-		var value = result._0;
 		var temp = subs;
 		while (temp.ctor !== '[]')
 		{
@@ -3539,7 +3538,13 @@ function setupIncomingPort(name, callback)
 
 	function send(incomingValue)
 	{
-		currentSend(incomingValue);
+		var result = A2(_elm_lang$core$Json_Decode$decodeValue, converter, incomingValue);
+		if (result.ctor === 'Err')
+		{
+			throw new Error('Trying to send an unexpected type of value through port `' + name + '`:\n' + result._0);
+		}
+
+		currentSend(result._0);
 	}
 
 	return { send: send };
@@ -4160,7 +4165,7 @@ function endsWith(sub, str)
 function indexes(sub, str)
 {
 	var subLen = sub.length;
-	
+
 	if (subLen < 1)
 	{
 		return _elm_lang$core$Native_List.Nil;
@@ -4173,74 +4178,78 @@ function indexes(sub, str)
 	{
 		is.push(i);
 		i = i + subLen;
-	}	
-	
+	}
+
 	return _elm_lang$core$Native_List.fromArray(is);
 }
+
 
 function toInt(s)
 {
 	var len = s.length;
+
+	// if empty
 	if (len === 0)
 	{
-		return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int" );
+		return intErr(s);
 	}
-	var start = 0;
-	if (s[0] === '-')
+
+	// if hex
+	var c = s[0];
+	if (c === '0' && s[1] === 'x')
 	{
-		if (len === 1)
+		for (var i = 2; i < len; ++i)
 		{
-			return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int" );
+			var c = s[i];
+			if (('0' <= c && c <= '9') || ('A' <= c && c <= 'F') || ('a' <= c && c <= 'f'))
+			{
+				continue;
+			}
+			return intErr(s);
 		}
-		start = 1;
+		return _elm_lang$core$Result$Ok(parseInt(s, 16));
 	}
-	for (var i = start; i < len; ++i)
+
+	// is decimal
+	if (c > '9' || (c < '0' && c !== '-' && c !== '+'))
+	{
+		return intErr(s);
+	}
+	for (var i = 1; i < len; ++i)
 	{
 		var c = s[i];
 		if (c < '0' || '9' < c)
 		{
-			return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int" );
+			return intErr(s);
 		}
 	}
+
 	return _elm_lang$core$Result$Ok(parseInt(s, 10));
 }
 
+function intErr(s)
+{
+	return _elm_lang$core$Result$Err("could not convert string '" + s + "' to an Int");
+}
+
+
 function toFloat(s)
 {
-	var len = s.length;
-	if (len === 0)
+	// check if it is a hex, octal, or binary number
+	if (s.length === 0 || /[\sxbo]/.test(s))
 	{
-		return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float" );
+		return floatErr(s);
 	}
-	var start = 0;
-	if (s[0] === '-')
-	{
-		if (len === 1)
-		{
-			return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float" );
-		}
-		start = 1;
-	}
-	var dotCount = 0;
-	for (var i = start; i < len; ++i)
-	{
-		var c = s[i];
-		if ('0' <= c && c <= '9')
-		{
-			continue;
-		}
-		if (c === '.')
-		{
-			dotCount += 1;
-			if (dotCount <= 1)
-			{
-				continue;
-			}
-		}
-		return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float" );
-	}
-	return _elm_lang$core$Result$Ok(parseFloat(s));
+	var n = +s;
+	// faster isNaN check
+	return n === n ? _elm_lang$core$Result$Ok(n) : floatErr(s);
 }
+
+function floatErr(s)
+{
+	return _elm_lang$core$Result$Err("could not convert string '" + s + "' to a Float");
+}
+
 
 function toList(str)
 {
@@ -5695,11 +5704,6 @@ function badToString(problem)
 				problem = problem.rest;
 				break;
 
-			case 'index':
-				context += '[' + problem.index + ']';
-				problem = problem.rest;
-				break;
-
 			case 'oneOf':
 				var problems = problem.problems;
 				for (var i = 0; i < problems.length; i++)
@@ -6806,9 +6810,9 @@ function on(name, options, decoder)
 
 function equalEvents(a, b)
 {
-	if (!a.options === b.options)
+	if (a.options !== b.options)
 	{
-		if (a.stopPropagation !== b.stopPropagation || a.preventDefault !== b.preventDefault)
+		if (a.options.stopPropagation !== b.options.stopPropagation || a.options.preventDefault !== b.options.preventDefault)
 		{
 			return false;
 		}
@@ -8084,7 +8088,7 @@ function normalRenderer(parentNode, view)
 var rAF =
 	typeof requestAnimationFrame !== 'undefined'
 		? requestAnimationFrame
-		: function(callback) { callback(); };
+		: function(callback) { setTimeout(callback, 1000 / 60); };
 
 function makeStepper(domNode, view, initialVirtualNode, eventNode)
 {
@@ -8582,6 +8586,356 @@ var _elm_lang$html$Html$summary = _elm_lang$html$Html$node('summary');
 var _elm_lang$html$Html$menuitem = _elm_lang$html$Html$node('menuitem');
 var _elm_lang$html$Html$menu = _elm_lang$html$Html$node('menu');
 
+var _elm_lang$html$Html_Attributes$map = _elm_lang$virtual_dom$VirtualDom$mapProperty;
+var _elm_lang$html$Html_Attributes$attribute = _elm_lang$virtual_dom$VirtualDom$attribute;
+var _elm_lang$html$Html_Attributes$contextmenu = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'contextmenu', value);
+};
+var _elm_lang$html$Html_Attributes$draggable = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'draggable', value);
+};
+var _elm_lang$html$Html_Attributes$itemprop = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'itemprop', value);
+};
+var _elm_lang$html$Html_Attributes$tabindex = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'tabIndex',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$charset = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'charset', value);
+};
+var _elm_lang$html$Html_Attributes$height = function (value) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'height',
+		_elm_lang$core$Basics$toString(value));
+};
+var _elm_lang$html$Html_Attributes$width = function (value) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'width',
+		_elm_lang$core$Basics$toString(value));
+};
+var _elm_lang$html$Html_Attributes$formaction = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'formAction', value);
+};
+var _elm_lang$html$Html_Attributes$list = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'list', value);
+};
+var _elm_lang$html$Html_Attributes$minlength = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'minLength',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$maxlength = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'maxlength',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$size = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'size',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$form = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'form', value);
+};
+var _elm_lang$html$Html_Attributes$cols = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'cols',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$rows = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'rows',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$challenge = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'challenge', value);
+};
+var _elm_lang$html$Html_Attributes$media = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'media', value);
+};
+var _elm_lang$html$Html_Attributes$rel = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'rel', value);
+};
+var _elm_lang$html$Html_Attributes$datetime = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'datetime', value);
+};
+var _elm_lang$html$Html_Attributes$pubdate = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'pubdate', value);
+};
+var _elm_lang$html$Html_Attributes$colspan = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'colspan',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$rowspan = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'rowspan',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$manifest = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'manifest', value);
+};
+var _elm_lang$html$Html_Attributes$property = _elm_lang$virtual_dom$VirtualDom$property;
+var _elm_lang$html$Html_Attributes$stringProperty = F2(
+	function (name, string) {
+		return A2(
+			_elm_lang$html$Html_Attributes$property,
+			name,
+			_elm_lang$core$Json_Encode$string(string));
+	});
+var _elm_lang$html$Html_Attributes$class = function (name) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'className', name);
+};
+var _elm_lang$html$Html_Attributes$id = function (name) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'id', name);
+};
+var _elm_lang$html$Html_Attributes$title = function (name) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'title', name);
+};
+var _elm_lang$html$Html_Attributes$accesskey = function ($char) {
+	return A2(
+		_elm_lang$html$Html_Attributes$stringProperty,
+		'accessKey',
+		_elm_lang$core$String$fromChar($char));
+};
+var _elm_lang$html$Html_Attributes$dir = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'dir', value);
+};
+var _elm_lang$html$Html_Attributes$dropzone = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'dropzone', value);
+};
+var _elm_lang$html$Html_Attributes$lang = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'lang', value);
+};
+var _elm_lang$html$Html_Attributes$content = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'content', value);
+};
+var _elm_lang$html$Html_Attributes$httpEquiv = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'httpEquiv', value);
+};
+var _elm_lang$html$Html_Attributes$language = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'language', value);
+};
+var _elm_lang$html$Html_Attributes$src = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'src', value);
+};
+var _elm_lang$html$Html_Attributes$alt = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'alt', value);
+};
+var _elm_lang$html$Html_Attributes$preload = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'preload', value);
+};
+var _elm_lang$html$Html_Attributes$poster = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'poster', value);
+};
+var _elm_lang$html$Html_Attributes$kind = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'kind', value);
+};
+var _elm_lang$html$Html_Attributes$srclang = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'srclang', value);
+};
+var _elm_lang$html$Html_Attributes$sandbox = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'sandbox', value);
+};
+var _elm_lang$html$Html_Attributes$srcdoc = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'srcdoc', value);
+};
+var _elm_lang$html$Html_Attributes$type_ = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'type', value);
+};
+var _elm_lang$html$Html_Attributes$value = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'value', value);
+};
+var _elm_lang$html$Html_Attributes$defaultValue = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'defaultValue', value);
+};
+var _elm_lang$html$Html_Attributes$placeholder = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'placeholder', value);
+};
+var _elm_lang$html$Html_Attributes$accept = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'accept', value);
+};
+var _elm_lang$html$Html_Attributes$acceptCharset = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'acceptCharset', value);
+};
+var _elm_lang$html$Html_Attributes$action = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'action', value);
+};
+var _elm_lang$html$Html_Attributes$autocomplete = function (bool) {
+	return A2(
+		_elm_lang$html$Html_Attributes$stringProperty,
+		'autocomplete',
+		bool ? 'on' : 'off');
+};
+var _elm_lang$html$Html_Attributes$enctype = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'enctype', value);
+};
+var _elm_lang$html$Html_Attributes$method = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'method', value);
+};
+var _elm_lang$html$Html_Attributes$name = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'name', value);
+};
+var _elm_lang$html$Html_Attributes$pattern = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'pattern', value);
+};
+var _elm_lang$html$Html_Attributes$for = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'htmlFor', value);
+};
+var _elm_lang$html$Html_Attributes$max = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'max', value);
+};
+var _elm_lang$html$Html_Attributes$min = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'min', value);
+};
+var _elm_lang$html$Html_Attributes$step = function (n) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'step', n);
+};
+var _elm_lang$html$Html_Attributes$wrap = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'wrap', value);
+};
+var _elm_lang$html$Html_Attributes$usemap = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'useMap', value);
+};
+var _elm_lang$html$Html_Attributes$shape = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'shape', value);
+};
+var _elm_lang$html$Html_Attributes$coords = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'coords', value);
+};
+var _elm_lang$html$Html_Attributes$keytype = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'keytype', value);
+};
+var _elm_lang$html$Html_Attributes$align = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'align', value);
+};
+var _elm_lang$html$Html_Attributes$cite = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'cite', value);
+};
+var _elm_lang$html$Html_Attributes$href = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'href', value);
+};
+var _elm_lang$html$Html_Attributes$target = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'target', value);
+};
+var _elm_lang$html$Html_Attributes$downloadAs = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'download', value);
+};
+var _elm_lang$html$Html_Attributes$hreflang = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'hreflang', value);
+};
+var _elm_lang$html$Html_Attributes$ping = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'ping', value);
+};
+var _elm_lang$html$Html_Attributes$start = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$stringProperty,
+		'start',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$headers = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'headers', value);
+};
+var _elm_lang$html$Html_Attributes$scope = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'scope', value);
+};
+var _elm_lang$html$Html_Attributes$boolProperty = F2(
+	function (name, bool) {
+		return A2(
+			_elm_lang$html$Html_Attributes$property,
+			name,
+			_elm_lang$core$Json_Encode$bool(bool));
+	});
+var _elm_lang$html$Html_Attributes$hidden = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'hidden', bool);
+};
+var _elm_lang$html$Html_Attributes$contenteditable = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'contentEditable', bool);
+};
+var _elm_lang$html$Html_Attributes$spellcheck = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'spellcheck', bool);
+};
+var _elm_lang$html$Html_Attributes$async = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'async', bool);
+};
+var _elm_lang$html$Html_Attributes$defer = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'defer', bool);
+};
+var _elm_lang$html$Html_Attributes$scoped = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'scoped', bool);
+};
+var _elm_lang$html$Html_Attributes$autoplay = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'autoplay', bool);
+};
+var _elm_lang$html$Html_Attributes$controls = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'controls', bool);
+};
+var _elm_lang$html$Html_Attributes$loop = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'loop', bool);
+};
+var _elm_lang$html$Html_Attributes$default = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'default', bool);
+};
+var _elm_lang$html$Html_Attributes$seamless = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'seamless', bool);
+};
+var _elm_lang$html$Html_Attributes$checked = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'checked', bool);
+};
+var _elm_lang$html$Html_Attributes$selected = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'selected', bool);
+};
+var _elm_lang$html$Html_Attributes$autofocus = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'autofocus', bool);
+};
+var _elm_lang$html$Html_Attributes$disabled = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'disabled', bool);
+};
+var _elm_lang$html$Html_Attributes$multiple = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'multiple', bool);
+};
+var _elm_lang$html$Html_Attributes$novalidate = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'noValidate', bool);
+};
+var _elm_lang$html$Html_Attributes$readonly = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'readOnly', bool);
+};
+var _elm_lang$html$Html_Attributes$required = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'required', bool);
+};
+var _elm_lang$html$Html_Attributes$ismap = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'isMap', value);
+};
+var _elm_lang$html$Html_Attributes$download = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'download', bool);
+};
+var _elm_lang$html$Html_Attributes$reversed = function (bool) {
+	return A2(_elm_lang$html$Html_Attributes$boolProperty, 'reversed', bool);
+};
+var _elm_lang$html$Html_Attributes$classList = function (list) {
+	return _elm_lang$html$Html_Attributes$class(
+		A2(
+			_elm_lang$core$String$join,
+			' ',
+			A2(
+				_elm_lang$core$List$map,
+				_elm_lang$core$Tuple$first,
+				A2(_elm_lang$core$List$filter, _elm_lang$core$Tuple$second, list))));
+};
+var _elm_lang$html$Html_Attributes$style = _elm_lang$virtual_dom$VirtualDom$style;
+
 var _elm_lang$html$Html_Events$keyCode = A2(_elm_lang$core$Json_Decode$field, 'keyCode', _elm_lang$core$Json_Decode$int);
 var _elm_lang$html$Html_Events$targetChecked = A2(
 	_elm_lang$core$Json_Decode$at,
@@ -8697,152 +9051,103 @@ var _elm_lang$html$Html_Events$Options = F2(
 		return {stopPropagation: a, preventDefault: b};
 	});
 
-var _user$project$Matrix$rowCount = function (m) {
-	return _elm_lang$core$Array$length(m);
-};
-var _user$project$Matrix$colCount = function (m) {
-	return A2(
-		_elm_lang$core$Maybe$withDefault,
-		0,
-		A2(
-			_elm_lang$core$Maybe$map,
-			_elm_lang$core$Array$length,
-			A2(_elm_lang$core$Array$get, 0, m)));
-};
-var _user$project$Matrix$fromList = function (l) {
-	return _elm_lang$core$Array$fromList(
-		A2(_elm_lang$core$List$map, _elm_lang$core$Array$fromList, l));
-};
-var _user$project$Matrix$toList = function (m) {
-	return _elm_lang$core$Array$toList(
-		A2(_elm_lang$core$Array$map, _elm_lang$core$Array$toList, m));
-};
-var _user$project$Matrix$flatten = function (m) {
-	return _elm_lang$core$List$concat(
-		_user$project$Matrix$toList(m));
-};
-var _user$project$Matrix$map = F2(
-	function (f, m) {
+var _user$project$Main$amountToHtml = F2(
+	function (amountOfBlue, amountOfRed) {
 		return A2(
-			_elm_lang$core$Array$map,
-			_elm_lang$core$Array$map(f),
-			m);
-	});
-var _user$project$Matrix$col = _elm_lang$core$Tuple$second;
-var _user$project$Matrix$row = _elm_lang$core$Tuple$first;
-var _user$project$Matrix$get = F2(
-	function (location, m) {
-		return A2(
-			_elm_lang$core$Maybe$andThen,
-			_elm_lang$core$Array$get(
-				_user$project$Matrix$col(location)),
-			A2(
-				_elm_lang$core$Array$get,
-				_user$project$Matrix$row(location),
-				m));
-	});
-var _user$project$Matrix$update = F3(
-	function (location, f, m) {
-		return A2(
-			_elm_lang$core$Maybe$withDefault,
-			m,
-			A2(
-				_elm_lang$core$Maybe$map,
-				function (current) {
-					return A2(
-						_elm_lang$core$Maybe$withDefault,
-						m,
-						A2(
-							_elm_lang$core$Maybe$map,
-							function (oldRow) {
-								return function (newRow) {
-									return A3(
-										_elm_lang$core$Array$set,
-										_user$project$Matrix$row(location),
-										newRow,
-										m);
-								}(
-									A3(
-										_elm_lang$core$Array$set,
-										_user$project$Matrix$col(location),
-										f(current),
-										oldRow));
-							},
+			_elm_lang$html$Html$div,
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('counter'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
+					_elm_lang$html$Html$h3,
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('blue'),
+						_1: {ctor: '[]'}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text(
 							A2(
-								_elm_lang$core$Array$get,
-								_user$project$Matrix$row(location),
-								m)));
-				},
-				A2(_user$project$Matrix$get, location, m)));
-	});
-var _user$project$Matrix$set = F3(
-	function (location, value, m) {
-		return A3(
-			_user$project$Matrix$update,
-			location,
-			_elm_lang$core$Basics$always(value),
-			m);
-	});
-var _user$project$Matrix$loc = F2(
-	function (v0, v1) {
-		return {ctor: '_Tuple2', _0: v0, _1: v1};
-	});
-var _user$project$Matrix$matrix = F3(
-	function (numRows, numCols, f) {
-		return A2(
-			_elm_lang$core$Array$initialize,
-			numRows,
-			function (row) {
-				return A2(
-					_elm_lang$core$Array$initialize,
-					numCols,
-					function (col) {
-						return f(
-							A2(_user$project$Matrix$loc, row, col));
-					});
+								_elm_lang$core$Basics_ops['++'],
+								'Blue blobs: ',
+								_elm_lang$core$Basics$toString(amountOfBlue))),
+						_1: {ctor: '[]'}
+					}),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$h3,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('red'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(
+								A2(
+									_elm_lang$core$Basics_ops['++'],
+									'Red blobs: ',
+									_elm_lang$core$Basics$toString(amountOfRed))),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
 			});
 	});
-var _user$project$Matrix$square = function (size) {
-	return A2(_user$project$Matrix$matrix, size, size);
-};
-var _user$project$Matrix$mapWithLocation = F2(
-	function (f, m) {
-		return A2(
-			_elm_lang$core$Array$indexedMap,
-			F2(
-				function (rowNum, row) {
-					return A2(
-						_elm_lang$core$Array$indexedMap,
-						F2(
-							function (colNum, element) {
-								return A2(
-									f,
-									A2(_user$project$Matrix$loc, rowNum, colNum),
-									element);
-							}),
-						row);
-				}),
-			m);
-	});
-
 var _user$project$Main$turnToHtml = function (turn) {
 	var _p0 = turn;
 	if (_p0.ctor === 'RedTurn') {
 		return A2(
-			_elm_lang$html$Html$h3,
-			{ctor: '[]'},
+			_elm_lang$html$Html$div,
 			{
 				ctor: '::',
-				_0: _elm_lang$html$Html$text('Red turn...'),
+				_0: _elm_lang$html$Html_Attributes$class('left'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
+					_elm_lang$html$Html$h3,
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('red'),
+						_1: {ctor: '[]'}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text('Red turn...'),
+						_1: {ctor: '[]'}
+					}),
 				_1: {ctor: '[]'}
 			});
 	} else {
 		return A2(
-			_elm_lang$html$Html$h3,
-			{ctor: '[]'},
+			_elm_lang$html$Html$div,
 			{
 				ctor: '::',
-				_0: _elm_lang$html$Html$text('Blue turn...'),
+				_0: _elm_lang$html$Html_Attributes$class('left'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
+					_elm_lang$html$Html$h3,
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('blue'),
+						_1: {ctor: '[]'}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text('Blue turn...'),
+						_1: {ctor: '[]'}
+					}),
 				_1: {ctor: '[]'}
 			});
 	}
@@ -8850,14 +9155,22 @@ var _user$project$Main$turnToHtml = function (turn) {
 var _user$project$Main$defaultViewWithContent = function (content) {
 	return A2(
 		_elm_lang$html$Html$div,
-		{ctor: '[]'},
+		{
+			ctor: '::',
+			_0: _elm_lang$html$Html_Attributes$class('container'),
+			_1: {ctor: '[]'}
+		},
 		A2(
 			_elm_lang$core$Basics_ops['++'],
 			{
 				ctor: '::',
 				_0: A2(
 					_elm_lang$html$Html$h1,
-					{ctor: '[]'},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('title'),
+						_1: {ctor: '[]'}
+					},
 					{
 						ctor: '::',
 						_0: _elm_lang$html$Html$text('Blob Wars!'),
@@ -8867,592 +9180,893 @@ var _user$project$Main$defaultViewWithContent = function (content) {
 			},
 			content));
 };
-var _user$project$Main$validSelection = F4(
-	function (x, y, turn, board) {
-		var matrixBoard = _user$project$Matrix$fromList(board);
-		var _p1 = turn;
-		if (_p1.ctor === 'BlueTurn') {
-			var _p2 = A2(
-				_user$project$Matrix$get,
-				A2(_user$project$Matrix$loc, x, y),
-				matrixBoard);
-			if (_p2.ctor === 'Just') {
-				var _p3 = _p2._0;
-				if (_p3.ctor === 'BlueBlob') {
-					return true;
-				} else {
-					return false;
-				}
-			} else {
-				return false;
-			}
-		} else {
-			var _p4 = A2(
-				_user$project$Matrix$get,
-				A2(_user$project$Matrix$loc, x, y),
-				matrixBoard);
-			if (_p4.ctor === 'Just') {
-				var _p5 = _p4._0;
-				if (_p5.ctor === 'RedBlob') {
-					return true;
-				} else {
-					return false;
-				}
-			} else {
-				return false;
-			}
-		}
-	});
-var _user$project$Main$getTilePosition = function (tile) {
-	var _p6 = tile;
-	switch (_p6.ctor) {
-		case 'RedBlob':
-			return {ctor: '_Tuple2', _0: _p6._0._0, _1: _p6._0._1};
-		case 'BlueBlob':
-			return {ctor: '_Tuple2', _0: _p6._0._0, _1: _p6._0._1};
-		case 'Empty':
-			return {ctor: '_Tuple2', _0: _p6._0._0, _1: _p6._0._1};
-		default:
-			return {ctor: '_Tuple2', _0: _p6._0._0, _1: _p6._0._1};
-	}
-};
-var _user$project$Main$getTile = F3(
-	function (x, y, board) {
-		var matrixBoard = _user$project$Matrix$fromList(board);
-		return A2(
-			_user$project$Matrix$get,
-			A2(_user$project$Matrix$loc, x, y),
-			matrixBoard);
-	});
-var _user$project$Main$checkFinalState = function (board) {
-	return _elm_lang$core$Native_Utils.eq(
-		A3(
-			_elm_lang$core$List$foldl,
-			F2(
-				function (tiles, acum) {
-					return acum + A3(
-						_elm_lang$core$List$foldl,
-						F2(
-							function (tile, acum) {
-								var _p7 = tile;
-								if (_p7.ctor === 'Empty') {
-									return acum + 1;
-								} else {
-									return acum;
-								}
-							}),
-						0,
-						tiles);
-				}),
-			0,
-			board),
-		0);
-};
-var _user$project$Main$calculateDistance = F4(
-	function (x1, y1, x2, y2) {
+var _user$project$Main$calculateDistance = F2(
+	function (p1, p2) {
 		return A2(
 			_elm_lang$core$Basics$max,
-			_elm_lang$core$Basics$abs(x1 - x2),
-			_elm_lang$core$Basics$abs(y1 - y2));
+			_elm_lang$core$Basics$abs(
+				_elm_lang$core$Tuple$first(p1) - _elm_lang$core$Tuple$first(p2)),
+			_elm_lang$core$Basics$abs(
+				_elm_lang$core$Tuple$second(p1) - _elm_lang$core$Tuple$second(p2)));
 	});
-var _user$project$Main$size = 8;
-var _user$project$Main$Model = F4(
-	function (a, b, c, d) {
-		return {board: a, lastAction: b, winner: c, turn: d};
+var _user$project$Main$isOnMoveRange = F2(
+	function (p1, p2) {
+		var distance = A2(_user$project$Main$calculateDistance, p1, p2);
+		return _elm_lang$core$Native_Utils.eq(distance, 1) || _elm_lang$core$Native_Utils.eq(distance, 2);
 	});
-var _user$project$Main$PossibleMovement = function (a) {
-	return {ctor: 'PossibleMovement', _0: a};
-};
-var _user$project$Main$BlueBlob = F2(
-	function (a, b) {
-		return {ctor: 'BlueBlob', _0: a, _1: b};
-	});
-var _user$project$Main$RedBlob = F2(
-	function (a, b) {
-		return {ctor: 'RedBlob', _0: a, _1: b};
-	});
-var _user$project$Main$createCurrentBlob = F3(
-	function (turn, x, y) {
-		var _p8 = turn;
-		if (_p8.ctor === 'BlueTurn') {
-			return A2(
-				_user$project$Main$BlueBlob,
-				{ctor: '_Tuple2', _0: x, _1: y},
-				false);
-		} else {
-			return A2(
-				_user$project$Main$RedBlob,
-				{ctor: '_Tuple2', _0: x, _1: y},
-				false);
-		}
-	});
-var _user$project$Main$selectBlob = function (tile) {
-	var _p9 = tile;
-	_v9_2:
-	do {
-		switch (_p9.ctor) {
-			case 'RedBlob':
-				if (_p9._0.ctor === '_Tuple2') {
+var _user$project$Main$matrixReduce = F4(
+	function (innerReduce, outerReduce, initialValue, matrix) {
+		return A3(
+			_elm_lang$core$List$foldr,
+			F2(
+				function (row, acum) {
 					return A2(
-						_user$project$Main$RedBlob,
-						{ctor: '_Tuple2', _0: _p9._0._0, _1: _p9._0._1},
-						true);
-				} else {
-					break _v9_2;
-				}
-			case 'BlueBlob':
-				if (_p9._0.ctor === '_Tuple2') {
-					return A2(
-						_user$project$Main$BlueBlob,
-						{ctor: '_Tuple2', _0: _p9._0._0, _1: _p9._0._1},
-						true);
-				} else {
-					break _v9_2;
-				}
-			default:
-				break _v9_2;
-		}
-	} while(false);
-	return tile;
-};
-var _user$project$Main$showMovements = F3(
-	function (x, y, board) {
-		return _user$project$Matrix$toList(
-			A2(
-				_user$project$Matrix$mapWithLocation,
-				F2(
-					function (location, tile) {
-						var distance = A4(
-							_user$project$Main$calculateDistance,
-							_elm_lang$core$Tuple$first(
-								_user$project$Main$getTilePosition(tile)),
-							_elm_lang$core$Tuple$second(
-								_user$project$Main$getTilePosition(tile)),
-							x,
-							y);
-						return (_elm_lang$core$Native_Utils.eq(distance, 1) || _elm_lang$core$Native_Utils.eq(distance, 2)) ? _user$project$Main$PossibleMovement(
-							{ctor: '_Tuple2', _0: x, _1: y}) : (_elm_lang$core$Native_Utils.eq(distance, 0) ? _user$project$Main$selectBlob(tile) : tile);
-					}),
-				_user$project$Matrix$fromList(board)));
+						outerReduce,
+						A3(_elm_lang$core$List$foldr, innerReduce, initialValue, row),
+						acum);
+				}),
+			initialValue,
+			matrix);
 	});
-var _user$project$Main$unselectBlob = function (tile) {
-	var _p10 = tile;
-	_v10_2:
-	do {
-		switch (_p10.ctor) {
-			case 'RedBlob':
-				if (_p10._0.ctor === '_Tuple2') {
-					return A2(
-						_user$project$Main$RedBlob,
-						{ctor: '_Tuple2', _0: _p10._0._0, _1: _p10._0._1},
-						false);
-				} else {
-					break _v10_2;
+var _user$project$Main$countBlobs = F2(
+	function (blob, board) {
+		var outerCount = F2(
+			function (amount, acum) {
+				return amount + acum;
+			});
+		var check = function (blobType) {
+			return _elm_lang$core$Native_Utils.eq(blobType, blob) ? 1 : 0;
+		};
+		var innerCount = F2(
+			function (tile, acum) {
+				var _p1 = tile;
+				switch (_p1.ctor) {
+					case 'Unselected':
+						return acum + check(_p1._0);
+					case 'Selected':
+						return acum + check(_p1._0);
+					default:
+						return acum;
 				}
-			case 'BlueBlob':
-				if (_p10._0.ctor === '_Tuple2') {
+			});
+		return A4(_user$project$Main$matrixReduce, innerCount, outerCount, 0, board);
+	});
+var _user$project$Main$isBoardCompleted = function (board) {
+	var outerReduce = F2(
+		function (rowCompleted, matrixCompleted) {
+			return rowCompleted && matrixCompleted;
+		});
+	var innerReduce = F2(
+		function (tile, completed) {
+			var _p2 = tile;
+			if (_p2.ctor === 'Empty') {
+				return false;
+			} else {
+				return completed;
+			}
+		});
+	return A4(_user$project$Main$matrixReduce, innerReduce, outerReduce, true, board);
+};
+var _user$project$Main$matrixIndexedMap = F2(
+	function (transform, board) {
+		return A2(
+			_elm_lang$core$List$indexedMap,
+			F2(
+				function (row, tiles) {
 					return A2(
-						_user$project$Main$BlueBlob,
-						{ctor: '_Tuple2', _0: _p10._0._0, _1: _p10._0._1},
-						false);
-				} else {
-					break _v10_2;
-				}
-			default:
-				break _v10_2;
-		}
-	} while(false);
-	return tile;
-};
-var _user$project$Main$Empty = function (a) {
-	return {ctor: 'Empty', _0: a};
-};
-var _user$project$Main$initializeBoard = A2(
-	_elm_lang$core$List$map,
-	function (row) {
+						_elm_lang$core$List$indexedMap,
+						transform(row),
+						tiles);
+				}),
+			board);
+	});
+var _user$project$Main$updateMovements = F3(
+	function (point, transform, board) {
+		var update = F3(
+			function (row, col, tile) {
+				return A2(
+					_user$project$Main$isOnMoveRange,
+					point,
+					{ctor: '_Tuple2', _0: row, _1: col}) ? transform(tile) : tile;
+			});
+		return A2(_user$project$Main$matrixIndexedMap, update, board);
+	});
+var _user$project$Main$updateBlob = F3(
+	function (point, transform, board) {
+		var update = F3(
+			function (row, col, tile) {
+				return _elm_lang$core$Native_Utils.eq(
+					point,
+					{ctor: '_Tuple2', _0: row, _1: col}) ? transform(tile) : tile;
+			});
+		return A2(_user$project$Main$matrixIndexedMap, update, board);
+	});
+var _user$project$Main$matrixMap = F2(
+	function (transform, board) {
 		return A2(
 			_elm_lang$core$List$map,
-			function (col) {
-				return (_elm_lang$core$Native_Utils.eq(
-					{ctor: '_Tuple2', _0: row, _1: col},
-					{ctor: '_Tuple2', _0: 0, _1: 0}) || _elm_lang$core$Native_Utils.eq(
-					{ctor: '_Tuple2', _0: row, _1: col},
-					{ctor: '_Tuple2', _0: 0, _1: _user$project$Main$size - 1})) ? A2(
-					_user$project$Main$BlueBlob,
-					{ctor: '_Tuple2', _0: row, _1: col},
-					false) : ((_elm_lang$core$Native_Utils.eq(
-					{ctor: '_Tuple2', _0: row, _1: col},
-					{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: 0}) || _elm_lang$core$Native_Utils.eq(
-					{ctor: '_Tuple2', _0: row, _1: col},
-					{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: _user$project$Main$size - 1})) ? A2(
-					_user$project$Main$RedBlob,
-					{ctor: '_Tuple2', _0: row, _1: col},
-					false) : _user$project$Main$Empty(
-					{ctor: '_Tuple2', _0: row, _1: col}));
+			function (tiles) {
+				return A2(_elm_lang$core$List$map, transform, tiles);
 			},
-			A2(_elm_lang$core$List$range, 0, _user$project$Main$size - 1));
-	},
-	A2(_elm_lang$core$List$range, 0, _user$project$Main$size - 1));
-var _user$project$Main$clearPossibleMovements = function (board) {
+			board);
+	});
+var _user$project$Main$getTile = F2(
+	function (point, board) {
+		var col = _elm_lang$core$Tuple$second(point);
+		var row = _elm_lang$core$Tuple$first(point);
+		var _p3 = _elm_lang$core$List$head(
+			A2(_elm_lang$core$List$drop, row, board));
+		if (_p3.ctor === 'Just') {
+			return _elm_lang$core$List$head(
+				A2(_elm_lang$core$List$drop, col, _p3._0));
+		} else {
+			return _elm_lang$core$Maybe$Nothing;
+		}
+	});
+var _user$project$Main$size = 8;
+var _user$project$Main$Model = F6(
+	function (a, b, c, d, e, f) {
+		return {board: a, selected: b, match: c, turn: d, amountOfRed: e, amountOfBlue: f};
+	});
+var _user$project$Main$Unselected = function (a) {
+	return {ctor: 'Unselected', _0: a};
+};
+var _user$project$Main$unselectTile = function (tile) {
+	var _p4 = tile;
+	if (_p4.ctor === 'Selected') {
+		return _user$project$Main$Unselected(_p4._0);
+	} else {
+		return tile;
+	}
+};
+var _user$project$Main$Selected = function (a) {
+	return {ctor: 'Selected', _0: a};
+};
+var _user$project$Main$selectTile = function (tile) {
+	var _p5 = tile;
+	if (_p5.ctor === 'Unselected') {
+		return _user$project$Main$Selected(_p5._0);
+	} else {
+		return tile;
+	}
+};
+var _user$project$Main$PossibleMovement = {ctor: 'PossibleMovement'};
+var _user$project$Main$showMovement = function (tile) {
+	var _p6 = tile;
+	if (_p6.ctor === 'Empty') {
+		return _user$project$Main$PossibleMovement;
+	} else {
+		return tile;
+	}
+};
+var _user$project$Main$Empty = {ctor: 'Empty'};
+var _user$project$Main$possibleMovementToEmpty = function (tile) {
+	var _p7 = tile;
+	if (_p7.ctor === 'PossibleMovement') {
+		return _user$project$Main$Empty;
+	} else {
+		return tile;
+	}
+};
+var _user$project$Main$updateLastSelection = F4(
+	function (p1, p2, originalTile, board) {
+		var distance = A2(_user$project$Main$calculateDistance, p1, p2);
+		var update = F3(
+			function (row, col, tile) {
+				return _elm_lang$core$Native_Utils.eq(
+					{ctor: '_Tuple2', _0: row, _1: col},
+					p2) ? (_elm_lang$core$Native_Utils.eq(distance, 2) ? _user$project$Main$Empty : originalTile) : tile;
+			});
+		return A2(_user$project$Main$matrixIndexedMap, update, board);
+	});
+var _user$project$Main$unshowMovement = function (tile) {
+	var _p8 = tile;
+	if (_p8.ctor === 'PossibleMovement') {
+		return _user$project$Main$Empty;
+	} else {
+		return tile;
+	}
+};
+var _user$project$Main$updateModelOnSelection = F2(
+	function (point, model) {
+		var unselectboard = F2(
+			function (lastSelectedpoint, board) {
+				return A3(
+					_user$project$Main$updateMovements,
+					lastSelectedpoint,
+					_user$project$Main$unshowMovement,
+					A3(_user$project$Main$updateBlob, lastSelectedpoint, _user$project$Main$unselectTile, board));
+			});
+		var selectBoard = function (board) {
+			return A3(
+				_user$project$Main$updateMovements,
+				point,
+				_user$project$Main$showMovement,
+				A3(_user$project$Main$updateBlob, point, _user$project$Main$selectTile, board));
+		};
+		var _p9 = model.selected;
+		if (_p9.ctor === 'Nothing') {
+			return _elm_lang$core$Native_Utils.update(
+				model,
+				{
+					board: selectBoard(model.board),
+					selected: _elm_lang$core$Maybe$Just(point)
+				});
+		} else {
+			return _elm_lang$core$Native_Utils.update(
+				model,
+				{
+					board: selectBoard(
+						A2(unselectboard, _p9._0, model.board)),
+					selected: _elm_lang$core$Maybe$Just(point)
+				});
+		}
+	});
+var _user$project$Main$handleBlobSelection = F2(
+	function (point, model) {
+		var tile = A2(_user$project$Main$getTile, point, model.board);
+		var _p10 = {ctor: '_Tuple2', _0: tile, _1: model.turn};
+		_v10_2:
+		do {
+			if ((_p10._0.ctor === 'Just') && (_p10._0._0.ctor === 'Unselected')) {
+				if (_p10._0._0._0.ctor === 'Red') {
+					if (_p10._1.ctor === 'RedTurn') {
+						return A2(_user$project$Main$updateModelOnSelection, point, model);
+					} else {
+						break _v10_2;
+					}
+				} else {
+					if (_p10._1.ctor === 'BlueTurn') {
+						return A2(_user$project$Main$updateModelOnSelection, point, model);
+					} else {
+						break _v10_2;
+					}
+				}
+			} else {
+				break _v10_2;
+			}
+		} while(false);
+		return model;
+	});
+var _user$project$Main$Red = {ctor: 'Red'};
+var _user$project$Main$Blue = {ctor: 'Blue'};
+var _user$project$Main$initialBoard = function () {
+	var getBlob = F2(
+		function (row, col) {
+			return (_elm_lang$core$Native_Utils.eq(
+				{ctor: '_Tuple2', _0: row, _1: col},
+				{ctor: '_Tuple2', _0: 0, _1: 0}) || _elm_lang$core$Native_Utils.eq(
+				{ctor: '_Tuple2', _0: row, _1: col},
+				{ctor: '_Tuple2', _0: 0, _1: _user$project$Main$size - 1})) ? _user$project$Main$Unselected(_user$project$Main$Blue) : ((_elm_lang$core$Native_Utils.eq(
+				{ctor: '_Tuple2', _0: row, _1: col},
+				{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: 0}) || _elm_lang$core$Native_Utils.eq(
+				{ctor: '_Tuple2', _0: row, _1: col},
+				{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: _user$project$Main$size - 1})) ? _user$project$Main$Unselected(_user$project$Main$Red) : _user$project$Main$Empty);
+		});
+	var cols = A2(_elm_lang$core$List$range, 0, _user$project$Main$size - 1);
+	var rows = A2(_elm_lang$core$List$range, 0, _user$project$Main$size - 1);
 	return A2(
 		_elm_lang$core$List$map,
-		function (tiles) {
+		function (row) {
 			return A2(
 				_elm_lang$core$List$map,
-				function (tile) {
-					var _p11 = tile;
-					if ((_p11.ctor === 'PossibleMovement') && (_p11._0.ctor === '_Tuple2')) {
-						return _user$project$Main$Empty(
-							{ctor: '_Tuple2', _0: _p11._0._0, _1: _p11._0._1});
-					} else {
-						return _user$project$Main$unselectBlob(tile);
-					}
-				},
-				tiles);
+				getBlob(row),
+				cols);
 		},
-		board);
+		rows);
+}();
+var _user$project$Main$selectedToUnselected = function (tile) {
+	var _p11 = tile;
+	if (_p11.ctor === 'Selected') {
+		if (_p11._0.ctor === 'Blue') {
+			return _user$project$Main$Unselected(_user$project$Main$Blue);
+		} else {
+			return _user$project$Main$Unselected(_user$project$Main$Red);
+		}
+	} else {
+		return tile;
+	}
 };
-var _user$project$Main$handleBlobSelection = F3(
-	function (x, y, model) {
-		return A4(_user$project$Main$validSelection, x, y, model.turn, model.board) ? _elm_lang$core$Native_Utils.update(
-			model,
-			{
-				board: A3(
-					_user$project$Main$showMovements,
-					x,
-					y,
-					_user$project$Main$clearPossibleMovements(model.board)),
-				lastAction: {ctor: '_Tuple2', _0: x, _1: y}
-			}) : _elm_lang$core$Native_Utils.update(
-			model,
-			{
-				board: _user$project$Main$clearPossibleMovements(model.board)
-			});
+var _user$project$Main$clear = function (model) {
+	return _elm_lang$core$Native_Utils.update(
+		model,
+		{
+			board: A2(
+				_user$project$Main$matrixMap,
+				_user$project$Main$selectedToUnselected,
+				A2(_user$project$Main$matrixMap, _user$project$Main$possibleMovementToEmpty, model.board)),
+			selected: _elm_lang$core$Maybe$Nothing
+		});
+};
+var _user$project$Main$updateAmountOfblobs = function (model) {
+	return _elm_lang$core$Native_Utils.update(
+		model,
+		{
+			amountOfRed: A2(_user$project$Main$countBlobs, _user$project$Main$Red, model.board),
+			amountOfBlue: A2(_user$project$Main$countBlobs, _user$project$Main$Blue, model.board)
+		});
+};
+var _user$project$Main$stainTile = F2(
+	function (turn, tile) {
+		var _p12 = turn;
+		if (_p12.ctor === 'RedTurn') {
+			var _p13 = tile;
+			_v13_2:
+			do {
+				switch (_p13.ctor) {
+					case 'Unselected':
+						if (_p13._0.ctor === 'Blue') {
+							return _user$project$Main$Unselected(_user$project$Main$Red);
+						} else {
+							break _v13_2;
+						}
+					case 'Selected':
+						if (_p13._0.ctor === 'Blue') {
+							return _user$project$Main$Selected(_user$project$Main$Red);
+						} else {
+							break _v13_2;
+						}
+					default:
+						break _v13_2;
+				}
+			} while(false);
+			return tile;
+		} else {
+			var _p14 = tile;
+			_v14_2:
+			do {
+				switch (_p14.ctor) {
+					case 'Unselected':
+						if (_p14._0.ctor === 'Red') {
+							return _user$project$Main$Unselected(_user$project$Main$Blue);
+						} else {
+							break _v14_2;
+						}
+					case 'Selected':
+						if (_p14._0.ctor === 'Red') {
+							return _user$project$Main$Selected(_user$project$Main$Blue);
+						} else {
+							break _v14_2;
+						}
+					default:
+						break _v14_2;
+				}
+			} while(false);
+			return tile;
+		}
 	});
-var _user$project$Main$MatchInProgress = {ctor: 'MatchInProgress'};
+var _user$project$Main$stainArea = F3(
+	function (point, turn, board) {
+		var stain = F3(
+			function (row, col, tile) {
+				return _elm_lang$core$Native_Utils.eq(
+					A2(
+						_user$project$Main$calculateDistance,
+						point,
+						{ctor: '_Tuple2', _0: row, _1: col}),
+					1) ? A2(_user$project$Main$stainTile, turn, tile) : tile;
+			});
+		return A2(_user$project$Main$matrixIndexedMap, stain, board);
+	});
+var _user$project$Main$unwrapTile = function (maybeTile) {
+	var _p15 = maybeTile;
+	if (_p15.ctor === 'Just') {
+		switch (_p15._0.ctor) {
+			case 'Unselected':
+				if (_p15._0._0.ctor === 'Blue') {
+					return _user$project$Main$Unselected(_user$project$Main$Blue);
+				} else {
+					return _user$project$Main$Unselected(_user$project$Main$Red);
+				}
+			case 'Selected':
+				if (_p15._0._0.ctor === 'Blue') {
+					return _user$project$Main$Selected(_user$project$Main$Blue);
+				} else {
+					return _user$project$Main$Selected(_user$project$Main$Red);
+				}
+			case 'Empty':
+				return _user$project$Main$Empty;
+			default:
+				return _user$project$Main$PossibleMovement;
+		}
+	} else {
+		return _user$project$Main$Empty;
+	}
+};
+var _user$project$Main$swap = F3(
+	function (p1, p2, board) {
+		var tile2 = _user$project$Main$unwrapTile(
+			A2(_user$project$Main$getTile, p2, board));
+		var tile1 = _user$project$Main$unwrapTile(
+			A2(_user$project$Main$getTile, p1, board));
+		var swapTransform = F3(
+			function (row, col, tile) {
+				return _elm_lang$core$Native_Utils.eq(
+					{ctor: '_Tuple2', _0: row, _1: col},
+					p1) ? tile2 : (_elm_lang$core$Native_Utils.eq(
+					{ctor: '_Tuple2', _0: row, _1: col},
+					p2) ? tile1 : tile);
+			});
+		return A2(_user$project$Main$matrixIndexedMap, swapTransform, board);
+	});
+var _user$project$Main$InProgress = {ctor: 'InProgress'};
+var _user$project$Main$Tie = {ctor: 'Tie'};
 var _user$project$Main$RedWin = {ctor: 'RedWin'};
 var _user$project$Main$BlueWin = {ctor: 'BlueWin'};
-var _user$project$Main$calculateWinner = function (board) {
-	var blue = A3(
-		_elm_lang$core$List$foldl,
-		F2(
-			function (tiles, acum) {
-				return acum + A3(
-					_elm_lang$core$List$foldl,
-					F2(
-						function (tile, acum) {
-							var _p12 = tile;
-							if (_p12.ctor === 'BlueBlob') {
-								return acum + 1;
-							} else {
-								return acum;
-							}
-						}),
-					0,
-					tiles);
-			}),
-		0,
-		board);
-	var red = A3(
-		_elm_lang$core$List$foldl,
-		F2(
-			function (tiles, acum) {
-				return acum + A3(
-					_elm_lang$core$List$foldl,
-					F2(
-						function (tile, acum) {
-							var _p13 = tile;
-							if (_p13.ctor === 'RedBlob') {
-								return acum + 1;
-							} else {
-								return acum;
-							}
-						}),
-					0,
-					tiles);
-			}),
-		0,
-		board);
-	return (_elm_lang$core$Native_Utils.cmp(red, blue) > 0) ? _user$project$Main$RedWin : _user$project$Main$BlueWin;
+var _user$project$Main$updateWinner = function (model) {
+	return (_elm_lang$core$Native_Utils.cmp(model.amountOfRed, model.amountOfBlue) < 0) ? _user$project$Main$BlueWin : ((_elm_lang$core$Native_Utils.cmp(model.amountOfRed, model.amountOfBlue) > 0) ? _user$project$Main$RedWin : _user$project$Main$Tie);
+};
+var _user$project$Main$checkGameStatus = function (model) {
+	return _user$project$Main$isBoardCompleted(model.board) ? _elm_lang$core$Native_Utils.update(
+		model,
+		{
+			match: _user$project$Main$updateWinner(model)
+		}) : model;
 };
 var _user$project$Main$RedTurn = {ctor: 'RedTurn'};
 var _user$project$Main$BlueTurn = {ctor: 'BlueTurn'};
-var _user$project$Main$init = A4(
-	_user$project$Main$Model,
-	_user$project$Main$initializeBoard,
-	{ctor: '_Tuple2', _0: 0, _1: 0},
-	_user$project$Main$MatchInProgress,
-	_user$project$Main$BlueTurn);
+var _user$project$Main$initialModel = A6(_user$project$Main$Model, _user$project$Main$initialBoard, _elm_lang$core$Maybe$Nothing, _user$project$Main$InProgress, _user$project$Main$BlueTurn, 2, 2);
 var _user$project$Main$changeTurn = function (turn) {
-	var _p14 = turn;
-	if (_p14.ctor === 'BlueTurn') {
-		return _user$project$Main$RedTurn;
-	} else {
+	var _p16 = turn;
+	if (_p16.ctor === 'RedTurn') {
 		return _user$project$Main$BlueTurn;
+	} else {
+		return _user$project$Main$RedTurn;
 	}
 };
-var _user$project$Main$moveBlob = F3(
-	function (x, y, model) {
-		var distance = A4(
-			_user$project$Main$calculateDistance,
-			_elm_lang$core$Tuple$first(model.lastAction),
-			_elm_lang$core$Tuple$second(model.lastAction),
-			x,
-			y);
-		var matrixBoard = _user$project$Matrix$fromList(model.board);
-		return _elm_lang$core$Native_Utils.eq(distance, 1) ? _elm_lang$core$Native_Utils.update(
-			model,
-			{
-				board: _user$project$Main$clearPossibleMovements(
-					_user$project$Matrix$toList(
+var _user$project$Main$handleBlobMovement = F2(
+	function (point, model) {
+		var selectedPoint = function () {
+			var _p17 = model.selected;
+			if (_p17.ctor === 'Just') {
+				return _p17._0;
+			} else {
+				return A2(
+					_elm_lang$core$Debug$log,
+					'This should never happend!!!',
+					{ctor: '_Tuple2', _0: 0, _1: 0});
+			}
+		}();
+		var tile = _user$project$Main$unwrapTile(
+			A2(_user$project$Main$getTile, selectedPoint, model.board));
+		var _p18 = model.selected;
+		if (_p18.ctor === 'Nothing') {
+			return _user$project$Main$clear(model);
+		} else {
+			var _p19 = _p18._0;
+			return _elm_lang$core$Native_Utils.update(
+				model,
+				{
+					board: A3(
+						_user$project$Main$stainArea,
+						point,
+						model.turn,
 						A3(
-							_user$project$Matrix$set,
-							A2(_user$project$Matrix$loc, x, y),
-							A3(_user$project$Main$createCurrentBlob, model.turn, x, y),
-							matrixBoard))),
-				turn: _user$project$Main$changeTurn(model.turn)
-			}) : (_elm_lang$core$Native_Utils.eq(distance, 2) ? _elm_lang$core$Native_Utils.update(
-			model,
-			{
-				board: _user$project$Main$clearPossibleMovements(
-					_user$project$Matrix$toList(
-						A3(
-							_user$project$Matrix$set,
-							A2(_user$project$Matrix$loc, x, y),
-							A3(_user$project$Main$createCurrentBlob, model.turn, x, y),
-							A3(
-								_user$project$Matrix$set,
-								A2(
-									_user$project$Matrix$loc,
-									_elm_lang$core$Tuple$first(model.lastAction),
-									_elm_lang$core$Tuple$second(model.lastAction)),
-								_user$project$Main$Empty(
-									{
-										ctor: '_Tuple2',
-										_0: _elm_lang$core$Tuple$first(model.lastAction),
-										_1: _elm_lang$core$Tuple$second(model.lastAction)
-									}),
-								matrixBoard)))),
-				turn: _user$project$Main$changeTurn(model.turn)
-			}) : _elm_lang$core$Native_Utils.update(
-			model,
-			{
-				board: _user$project$Main$clearPossibleMovements(model.board)
-			}));
-	});
-var _user$project$Main$handleMovement = F3(
-	function (x, y, model) {
-		var newModel = A3(_user$project$Main$moveBlob, x, y, model);
-		return _user$project$Main$checkFinalState(newModel.board) ? _elm_lang$core$Native_Utils.update(
-			newModel,
-			{
-				winner: _user$project$Main$calculateWinner(model.board)
-			}) : newModel;
+							_user$project$Main$swap,
+							_p19,
+							point,
+							A4(_user$project$Main$updateLastSelection, _p19, point, tile, model.board))),
+					selected: _elm_lang$core$Maybe$Nothing,
+					turn: _user$project$Main$changeTurn(model.turn)
+				});
+		}
 	});
 var _user$project$Main$update = F2(
 	function (msg, model) {
-		var _p15 = msg;
-		var _p16 = A3(_user$project$Main$getTile, _p15._0._0, _p15._0._1, model.board);
-		if (_p16.ctor === 'Just') {
-			var _p17 = _p16._0;
-			switch (_p17.ctor) {
-				case 'Empty':
-					return _elm_lang$core$Native_Utils.update(
-						model,
-						{
-							board: _user$project$Main$clearPossibleMovements(model.board)
-						});
-				case 'PossibleMovement':
-					return A3(_user$project$Main$handleMovement, _p17._0._0, _p17._0._1, model);
-				case 'BlueBlob':
-					if (_p17._1 === false) {
-						return A3(_user$project$Main$handleBlobSelection, _p17._0._0, _p17._0._1, model);
-					} else {
-						return _elm_lang$core$Native_Utils.update(
-							model,
-							{
-								board: _user$project$Main$clearPossibleMovements(model.board)
-							});
-					}
-				default:
-					if (_p17._1 === false) {
-						return A3(_user$project$Main$handleBlobSelection, _p17._0._0, _p17._0._1, model);
-					} else {
-						return _elm_lang$core$Native_Utils.update(
-							model,
-							{
-								board: _user$project$Main$clearPossibleMovements(model.board)
-							});
-					}
+		var _p20 = A2(_elm_lang$core$Debug$log, 'msg', msg);
+		if (_p20.ctor === 'Click') {
+			var _p23 = _p20._0;
+			var _p21 = A2(_user$project$Main$getTile, _p23, model.board);
+			if (_p21.ctor === 'Just') {
+				var _p22 = A2(_elm_lang$core$Debug$log, 'selected tile', _p21._0);
+				switch (_p22.ctor) {
+					case 'Empty':
+						return _user$project$Main$clear(model);
+					case 'PossibleMovement':
+						return _user$project$Main$checkGameStatus(
+							_user$project$Main$updateAmountOfblobs(
+								_user$project$Main$clear(
+									A2(_user$project$Main$handleBlobMovement, _p23, model))));
+					case 'Unselected':
+						return A2(
+							_user$project$Main$handleBlobSelection,
+							_p23,
+							_user$project$Main$clear(model));
+					default:
+						return model;
+				}
+			} else {
+				return A2(_elm_lang$core$Debug$log, 'This should never happend!!!', model);
 			}
 		} else {
-			return model;
+			return _user$project$Main$initialModel;
 		}
 	});
+var _user$project$Main$Restart = {ctor: 'Restart'};
 var _user$project$Main$Click = function (a) {
 	return {ctor: 'Click', _0: a};
 };
 var _user$project$Main$boardToHtml = function (board) {
+	var update = F3(
+		function (row, col, tile) {
+			var _p24 = tile;
+			switch (_p24.ctor) {
+				case 'Empty':
+					return A2(
+						_elm_lang$html$Html$td,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Events$onClick(
+								_user$project$Main$Click(
+									{ctor: '_Tuple2', _0: row, _1: col})),
+							_1: {
+								ctor: '::',
+								_0: _elm_lang$html$Html_Attributes$class('tile empty'),
+								_1: {ctor: '[]'}
+							}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(''),
+							_1: {ctor: '[]'}
+						});
+				case 'PossibleMovement':
+					return A2(
+						_elm_lang$html$Html$td,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Events$onClick(
+								_user$project$Main$Click(
+									{ctor: '_Tuple2', _0: row, _1: col})),
+							_1: {
+								ctor: '::',
+								_0: _elm_lang$html$Html_Attributes$class('tile possibleMovement'),
+								_1: {ctor: '[]'}
+							}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(''),
+							_1: {ctor: '[]'}
+						});
+				case 'Unselected':
+					var _p25 = _p24._0;
+					if (_p25.ctor === 'Red') {
+						return A2(
+							_elm_lang$html$Html$td,
+							{
+								ctor: '::',
+								_0: _elm_lang$html$Html_Events$onClick(
+									_user$project$Main$Click(
+										{ctor: '_Tuple2', _0: row, _1: col})),
+								_1: {
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('tile unselected'),
+									_1: {ctor: '[]'}
+								}
+							},
+							{
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$img,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$src('./Assets/red_blob.png'),
+										_1: {ctor: '[]'}
+									},
+									{ctor: '[]'}),
+								_1: {ctor: '[]'}
+							});
+					} else {
+						return A2(
+							_elm_lang$html$Html$td,
+							{
+								ctor: '::',
+								_0: _elm_lang$html$Html_Events$onClick(
+									_user$project$Main$Click(
+										{ctor: '_Tuple2', _0: row, _1: col})),
+								_1: {
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('tile unselected'),
+									_1: {ctor: '[]'}
+								}
+							},
+							{
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$img,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$src('./Assets/blue_blob.png'),
+										_1: {ctor: '[]'}
+									},
+									{ctor: '[]'}),
+								_1: {ctor: '[]'}
+							});
+					}
+				default:
+					var _p26 = _p24._0;
+					if (_p26.ctor === 'Red') {
+						return A2(
+							_elm_lang$html$Html$td,
+							{
+								ctor: '::',
+								_0: _elm_lang$html$Html_Events$onClick(
+									_user$project$Main$Click(
+										{ctor: '_Tuple2', _0: row, _1: col})),
+								_1: {
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('tile selected'),
+									_1: {ctor: '[]'}
+								}
+							},
+							{
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$img,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$src('./Assets/red_blob_selected.png'),
+										_1: {ctor: '[]'}
+									},
+									{ctor: '[]'}),
+								_1: {ctor: '[]'}
+							});
+					} else {
+						return A2(
+							_elm_lang$html$Html$td,
+							{
+								ctor: '::',
+								_0: _elm_lang$html$Html_Events$onClick(
+									_user$project$Main$Click(
+										{ctor: '_Tuple2', _0: row, _1: col})),
+								_1: {
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('tile selected'),
+									_1: {ctor: '[]'}
+								}
+							},
+							{
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$img,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$src('./Assets/blue_blob_selected.png'),
+										_1: {ctor: '[]'}
+									},
+									{ctor: '[]'}),
+								_1: {ctor: '[]'}
+							});
+					}
+			}
+		});
 	return A2(
 		_elm_lang$core$List$map,
 		function (tiles) {
 			return A2(
 				_elm_lang$html$Html$tr,
 				{ctor: '[]'},
-				A2(
-					_elm_lang$core$List$map,
-					function (elem) {
-						var _p18 = elem;
-						switch (_p18.ctor) {
-							case 'Empty':
-								return A2(
-									_elm_lang$html$Html$td,
-									{
-										ctor: '::',
-										_0: _elm_lang$html$Html_Events$onClick(
-											_user$project$Main$Click(
-												{ctor: '_Tuple2', _0: _p18._0._0, _1: _p18._0._1})),
-										_1: {ctor: '[]'}
-									},
-									{
-										ctor: '::',
-										_0: _elm_lang$html$Html$text('X'),
-										_1: {ctor: '[]'}
-									});
-							case 'RedBlob':
-								if (_p18._1 === false) {
-									return A2(
-										_elm_lang$html$Html$td,
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html_Events$onClick(
-												_user$project$Main$Click(
-													{ctor: '_Tuple2', _0: _p18._0._0, _1: _p18._0._1})),
-											_1: {ctor: '[]'}
-										},
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html$text('r'),
-											_1: {ctor: '[]'}
-										});
-								} else {
-									return A2(
-										_elm_lang$html$Html$td,
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html_Events$onClick(
-												_user$project$Main$Click(
-													{ctor: '_Tuple2', _0: _p18._0._0, _1: _p18._0._1})),
-											_1: {ctor: '[]'}
-										},
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html$text('R'),
-											_1: {ctor: '[]'}
-										});
-								}
-							case 'BlueBlob':
-								if (_p18._1 === false) {
-									return A2(
-										_elm_lang$html$Html$td,
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html_Events$onClick(
-												_user$project$Main$Click(
-													{ctor: '_Tuple2', _0: _p18._0._0, _1: _p18._0._1})),
-											_1: {ctor: '[]'}
-										},
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html$text('b'),
-											_1: {ctor: '[]'}
-										});
-								} else {
-									return A2(
-										_elm_lang$html$Html$td,
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html_Events$onClick(
-												_user$project$Main$Click(
-													{ctor: '_Tuple2', _0: _p18._0._0, _1: _p18._0._1})),
-											_1: {ctor: '[]'}
-										},
-										{
-											ctor: '::',
-											_0: _elm_lang$html$Html$text('B'),
-											_1: {ctor: '[]'}
-										});
-								}
-							default:
-								return A2(
-									_elm_lang$html$Html$td,
-									{
-										ctor: '::',
-										_0: _elm_lang$html$Html_Events$onClick(
-											_user$project$Main$Click(
-												{ctor: '_Tuple2', _0: _p18._0._0, _1: _p18._0._1})),
-										_1: {ctor: '[]'}
-									},
-									{
-										ctor: '::',
-										_0: _elm_lang$html$Html$text('o'),
-										_1: {ctor: '[]'}
-									});
-						}
-					},
-					tiles));
+				tiles);
 		},
-		board);
+		A2(_user$project$Main$matrixIndexedMap, update, board));
 };
 var _user$project$Main$view = function (model) {
-	var _p19 = model.winner;
-	switch (_p19.ctor) {
+	var restartButton = A2(
+		_elm_lang$html$Html$div,
+		{
+			ctor: '::',
+			_0: _elm_lang$html$Html_Attributes$class('restartButton'),
+			_1: {ctor: '[]'}
+		},
+		{
+			ctor: '::',
+			_0: A2(
+				_elm_lang$html$Html$button,
+				{
+					ctor: '::',
+					_0: _elm_lang$html$Html_Events$onClick(_user$project$Main$Restart),
+					_1: {ctor: '[]'}
+				},
+				{
+					ctor: '::',
+					_0: _elm_lang$html$Html$text('Restart'),
+					_1: {ctor: '[]'}
+				}),
+			_1: {ctor: '[]'}
+		});
+	var _p27 = model.match;
+	switch (_p27.ctor) {
 		case 'BlueWin':
 			return _user$project$Main$defaultViewWithContent(
 				{
 					ctor: '::',
 					_0: A2(
-						_elm_lang$html$Html$h2,
-						{ctor: '[]'},
+						_elm_lang$html$Html$div,
 						{
 							ctor: '::',
-							_0: _elm_lang$html$Html$text('Blue wins!'),
+							_0: _elm_lang$html$Html_Attributes$class('header'),
 							_1: {ctor: '[]'}
-						}),
-					_1: {ctor: '[]'}
-				});
-		case 'RedWin':
-			return _user$project$Main$defaultViewWithContent(
-				{
-					ctor: '::',
-					_0: A2(
-						_elm_lang$html$Html$h2,
-						{ctor: '[]'},
+						},
 						{
 							ctor: '::',
-							_0: _elm_lang$html$Html$text('Red wins!'),
-							_1: {ctor: '[]'}
+							_0: A2(
+								_elm_lang$html$Html$div,
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('left'),
+									_1: {ctor: '[]'}
+								},
+								{
+									ctor: '::',
+									_0: A2(
+										_elm_lang$html$Html$h2,
+										{ctor: '[]'},
+										{
+											ctor: '::',
+											_0: _elm_lang$html$Html$text('Blue wins!'),
+											_1: {ctor: '[]'}
+										}),
+									_1: {ctor: '[]'}
+								}),
+							_1: {
+								ctor: '::',
+								_0: A2(_user$project$Main$amountToHtml, model.amountOfBlue, model.amountOfRed),
+								_1: {ctor: '[]'}
+							}
 						}),
-					_1: {ctor: '[]'}
-				});
-		default:
-			return _user$project$Main$defaultViewWithContent(
-				{
-					ctor: '::',
-					_0: _user$project$Main$turnToHtml(model.turn),
 					_1: {
 						ctor: '::',
 						_0: A2(
 							_elm_lang$html$Html$table,
 							{ctor: '[]'},
 							_user$project$Main$boardToHtml(model.board)),
-						_1: {ctor: '[]'}
+						_1: {
+							ctor: '::',
+							_0: restartButton,
+							_1: {ctor: '[]'}
+						}
+					}
+				});
+		case 'RedWin':
+			return _user$project$Main$defaultViewWithContent(
+				{
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('header'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: A2(
+								_elm_lang$html$Html$div,
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('left'),
+									_1: {ctor: '[]'}
+								},
+								{
+									ctor: '::',
+									_0: A2(
+										_elm_lang$html$Html$h2,
+										{ctor: '[]'},
+										{
+											ctor: '::',
+											_0: _elm_lang$html$Html$text('Red wins!'),
+											_1: {ctor: '[]'}
+										}),
+									_1: {ctor: '[]'}
+								}),
+							_1: {
+								ctor: '::',
+								_0: A2(_user$project$Main$amountToHtml, model.amountOfBlue, model.amountOfRed),
+								_1: {ctor: '[]'}
+							}
+						}),
+					_1: {
+						ctor: '::',
+						_0: A2(
+							_elm_lang$html$Html$table,
+							{ctor: '[]'},
+							_user$project$Main$boardToHtml(model.board)),
+						_1: {
+							ctor: '::',
+							_0: restartButton,
+							_1: {ctor: '[]'}
+						}
+					}
+				});
+		case 'Tie':
+			return _user$project$Main$defaultViewWithContent(
+				{
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('header'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: A2(
+								_elm_lang$html$Html$div,
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('left'),
+									_1: {ctor: '[]'}
+								},
+								{
+									ctor: '::',
+									_0: A2(
+										_elm_lang$html$Html$h2,
+										{ctor: '[]'},
+										{
+											ctor: '::',
+											_0: _elm_lang$html$Html$text('Tie!'),
+											_1: {ctor: '[]'}
+										}),
+									_1: {ctor: '[]'}
+								}),
+							_1: {
+								ctor: '::',
+								_0: A2(_user$project$Main$amountToHtml, model.amountOfBlue, model.amountOfRed),
+								_1: {ctor: '[]'}
+							}
+						}),
+					_1: {
+						ctor: '::',
+						_0: A2(
+							_elm_lang$html$Html$table,
+							{ctor: '[]'},
+							_user$project$Main$boardToHtml(model.board)),
+						_1: {
+							ctor: '::',
+							_0: restartButton,
+							_1: {ctor: '[]'}
+						}
+					}
+				});
+		default:
+			return _user$project$Main$defaultViewWithContent(
+				{
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('header'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _user$project$Main$turnToHtml(model.turn),
+							_1: {
+								ctor: '::',
+								_0: A2(_user$project$Main$amountToHtml, model.amountOfBlue, model.amountOfRed),
+								_1: {ctor: '[]'}
+							}
+						}),
+					_1: {
+						ctor: '::',
+						_0: A2(
+							_elm_lang$html$Html$table,
+							{ctor: '[]'},
+							_user$project$Main$boardToHtml(model.board)),
+						_1: {
+							ctor: '::',
+							_0: restartButton,
+							_1: {ctor: '[]'}
+						}
 					}
 				});
 	}
 };
 var _user$project$Main$main = _elm_lang$html$Html$beginnerProgram(
-	{model: _user$project$Main$init, view: _user$project$Main$view, update: _user$project$Main$update})();
+	{model: _user$project$Main$initialModel, view: _user$project$Main$view, update: _user$project$Main$update})();
 
 var Elm = {};
 Elm['Main'] = Elm['Main'] || {};

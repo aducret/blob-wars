@@ -1,5 +1,6 @@
 import Html exposing (..)
 import Html.Events exposing (..)
+import Html.Attributes exposing (..)
 import Debug exposing (..)
 import Random
 
@@ -382,54 +383,53 @@ unshowMovement tile =
 
 calculateDistance : Point -> Point -> Distance
 calculateDistance p1 p2 =
-  max (abs (Tuple.first p1 - Tuple.first p2)) (abs (Tuple.second p1 - Tuple.second p2))
+  Basics.max (abs (Tuple.first p1 - Tuple.first p2)) (abs (Tuple.second p1 - Tuple.second p2))
 
 -- VIEW
 
 view : Model -> Html Msg
 view model =
   let
-    restartButton = button [onClick Restart] [text "Restart"]
-    default = [amountToHtml model.amountOfBlue model.amountOfRed, table [] (boardToHtml model.board), restartButton]
+    restartButton = div [class "restartButton"] [button [onClick Restart] [text "Restart"]]
   in
    case model.match of
      BlueWin ->
-        defaultViewWithContent ([h2 [] [text "Blue wins!"]] ++ default)
+        defaultViewWithContent ([div [class "header"] [div [class "left"] [h2 [] [text "Blue wins!"]], amountToHtml model.amountOfBlue model.amountOfRed], table [] (boardToHtml model.board), restartButton])
      RedWin ->
-        defaultViewWithContent ([h2 [] [text "Red wins!"]] ++ default)
+        defaultViewWithContent ([div [class "header"] [div [class "left"] [h2 [] [text "Red wins!"]], amountToHtml model.amountOfBlue model.amountOfRed], table [] (boardToHtml model.board), restartButton])
      Tie ->
-        defaultViewWithContent ([h2 [] [text "Tie!"]] ++ default)
+        defaultViewWithContent ([div [class "header"] [div [class "left"] [h2 [] [text "Tie!"]], amountToHtml model.amountOfBlue model.amountOfRed], table [] (boardToHtml model.board), restartButton])
      InProgress ->
-        defaultViewWithContent ([turnToHtml model.turn] ++ default)
+        defaultViewWithContent ([div [class "header"] [turnToHtml model.turn, amountToHtml model.amountOfBlue model.amountOfRed], table [] (boardToHtml model.board), restartButton])
 
 defaultViewWithContent : List(Html Msg) -> Html Msg
 defaultViewWithContent content =
-   div [] ([ h1 [] [ text "Blob Wars!" ]] ++ content)
+   div [class "container"] ([ h1 [class "title"] [ text "Blob Wars!" ]] ++ content)
 
 turnToHtml : Turn -> Html Msg
 turnToHtml turn =
    case turn of
-      RedTurn -> h3 [] [text "Red turn..."]
-      BlueTurn -> h3 [] [text "Blue turn..."]
+      RedTurn -> div [class "left"] [h3 [class "red"] [text "Red turn..."]]
+      BlueTurn -> div [class "left"] [h3 [class "blue"] [text "Blue turn..."]]
 
 amountToHtml : Amount -> Amount -> Html Msg
 amountToHtml amountOfBlue amountOfRed =
-  h3 [] [text ("Blue blobs: " ++ (toString amountOfBlue)), text ("Red blobs: " ++ (toString amountOfRed))]
+  div [class "counter"] [h3 [class "blue"] [text ("Blue blobs: " ++ (toString amountOfBlue))], h3 [class "red"] [text ("Red blobs: " ++ (toString amountOfRed))]]
 
 boardToHtml : List(List(Tile)) -> List(Html Msg)
 boardToHtml board =
   let
     update row col tile =
       case tile of
-         Empty            -> td [onClick (Click (row, col))] [text "X"]
-         PossibleMovement -> td [onClick (Click (row, col))] [text "o"]
+         Empty            -> td [onClick (Click (row, col)), class "tile empty"] [text ""]
+         PossibleMovement -> td [onClick (Click (row  , col)), class "tile possibleMovement"] [text ""]
          Unselected blob ->
             case blob of
-               Red        -> td [onClick (Click (row, col))] [text "r"]
-               Blue       -> td [onClick (Click (row, col))] [text "b"]
+               Red        -> td [onClick (Click (row, col)), class "tile unselected"] [img [src "./Assets/red_blob.png"] []]
+               Blue       -> td [onClick (Click (row, col)), class "tile unselected"] [img [src "./Assets/blue_blob.png"] []]
          Selected blob ->
             case blob of
-               Red        -> td [onClick (Click (row, col))] [text "R"]
-               Blue       -> td [onClick (Click (row, col))] [text "B"]
+               Red        -> td [onClick (Click (row, col)), class "tile selected"] [img [src "./Assets/red_blob_selected.png"] []]
+               Blue       -> td [onClick (Click (row, col)), class "tile selected"] [img [src "./Assets/blue_blob_selected.png"] []]
   in
     List.map (\tiles -> tr [] tiles) (matrixIndexedMap update board)
