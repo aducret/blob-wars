@@ -12,9 +12,9 @@ main = Html.beginnerProgram
 
 -- MODEL
 
-type alias Transform a b= a -> b
+type alias Transform a b = a -> b
 
-type alias IndexedTransform a b= Row -> Col -> a -> b
+type alias IndexedTransform a b = Row -> Col -> a -> b
 
 type alias Matrix a = List(List(a))
 
@@ -30,12 +30,16 @@ type alias Point = (Row, Col)
 
 type alias Board = List(List(Tile))
 
+type alias Amount = Int
+
 type alias Model =
    {
       board           : Board,
       selected        : Maybe Point,
       match           : Match,
-      turn            : Turn
+      turn            : Turn,
+      amountOfRed     : Amount,
+      amountOfBlue    : Amount
    }
 
 type Tile = Empty
@@ -55,7 +59,7 @@ type Turn = BlueTurn
           | RedTurn
 
 size : Size
-size = 8
+size = 4
 
 initialBoard : Board
 initialBoard =
@@ -73,7 +77,7 @@ initialBoard =
       List.map (\row -> List.map (getBlob row) cols) rows
 
 initialModel : Model
-initialModel = Model initialBoard Maybe.Nothing InProgress BlueTurn
+initialModel = Model initialBoard Maybe.Nothing InProgress BlueTurn 2 2
 
 -- UPDATE
 
@@ -90,10 +94,12 @@ update msg model =
                   PossibleMovement   -> model
                                           |> handleBlobMovement point
                                           |> clear
-                  Selected blob      -> model
+                                          |> updateAmountOfblobs
+                                          |> checkGameStatus
                   Unselected blob    -> model
                                           |> clear
                                           |> handleBlobSelection point
+                  _                  -> model
             Nothing -> Debug.log "This should never happend!!!" model
 
 getTile : Point -> Board -> Maybe Tile
@@ -145,6 +151,59 @@ handleBlobSelection point model =
       (Just (Unselected Red), RedTurn)   -> updateModelOnSelection point model
       (Just (Unselected Blue), BlueTurn) -> updateModelOnSelection point model
       (_, _)             -> model
+
+updateAmountOfblobs : Model -> Model
+updateAmountOfblobs model =
+    {  model |
+       amountOfRed = countBlobs Red model.board,
+       amountOfBlue = countBlobs Blue model.board
+    }
+
+checkGameStatus : Model -> Model
+checkGameStatus model =
+  if isBoardCompleted model.board then
+    { model |
+      match = updateWinner model
+    }
+  else
+    model
+
+updateWinner : Model -> Match
+updateWinner model =
+  if model.amountOfRed < model.amountOfBlue then
+    BlueWin
+  else if model.amountOfRed > model.amountOfBlue then
+    RedWin
+  else
+    Tie
+
+isBoardCompleted : Board -> Bool
+isBoardCompleted board =
+  let
+    innerReduce tile completed =
+      case tile of
+        Empty -> False
+        _ -> completed
+    outerReduce rowCompleted matrixCompleted = rowCompleted && matrixCompleted
+  in
+    matrixReduce innerReduce outerReduce True board
+
+countBlobs : Blob -> Board -> Amount
+countBlobs blob board =
+  let
+    check blobType = if blobType == blob then 1 else 0
+    innerCount tile acum =
+      case tile of
+        Unselected blobType -> acum + check blobType
+        Selected blobType -> acum + check blobType
+        _ -> acum
+    outerCount amount acum = amount + acum
+  in
+    matrixReduce innerCount outerCount 0 board
+
+matrixReduce : (a -> b -> b) -> (b -> b -> b) -> b -> Matrix a -> b
+matrixReduce innerReduce outerReduce initialValue matrix =
+  List.foldr (\row acum -> outerReduce (List.foldr innerReduce initialValue row) acum) initialValue matrix
 
 handleBlobMovement : Point -> Model -> Model
 handleBlobMovement point model =
@@ -335,7 +394,7 @@ view model =
    Tie ->
       defaultViewWithContent [h2 [] [text "Tie!"]]
    InProgress ->
-      defaultViewWithContent [turnToHtml model.turn, table [] (boardToHtml model.board)]
+      defaultViewWithContent [turnToHtml model.turn, amountToHtml model.amountOfBlue model.amountOfRed, table [] (boardToHtml model.board)]
 
 defaultViewWithContent : List(Html Msg) -> Html Msg
 defaultViewWithContent content =
@@ -346,6 +405,10 @@ turnToHtml turn =
    case turn of
       RedTurn -> h3 [] [text "Red turn..."]
       BlueTurn -> h3 [] [text "Blue turn..."]
+
+amountToHtml : Amount -> Amount -> Html Msg
+amountToHtml amountOfBlue amountOfRed =
+  h3 [] [text ("Blue blobs: " ++ (toString amountOfBlue)), text ("Red blobs: " ++ (toString amountOfRed))]
 
 boardToHtml : List(List(Tile)) -> List(Html Msg)
 boardToHtml board =
