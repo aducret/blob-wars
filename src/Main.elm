@@ -68,9 +68,9 @@ initialBoard =
       rows = (List.range 0 (size-1))
       cols = (List.range 0 (size-1))
       getBlob row col =
-         if (row, col) == (0, 0) || (row, col) == (0, size-1) then
+         if (row, col) == (0, 0) || (row, col) == (size-1, 0) then
             Unselected Blue
-         else if (row, col) == (size-1, 0) || (row, col) == (size-1, size-1) then
+         else if (row, col) == (0, size-1) || (row, col) == (size-1, size-1) then
             Unselected Red
          else
             Empty
@@ -167,6 +167,14 @@ checkGameStatus model =
   if isBoardCompleted model.board then
     { model |
       match = updateWinner model
+    }
+  else if model.amountOfRed == 0 then
+    { model |
+      match = BlueWin
+    }
+  else if model.amountOfBlue == 0 then
+    { model |
+      match = RedWin
     }
   else
     model

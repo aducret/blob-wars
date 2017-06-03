@@ -9437,9 +9437,9 @@ var _user$project$Main$initialBoard = function () {
 				{ctor: '_Tuple2', _0: row, _1: col},
 				{ctor: '_Tuple2', _0: 0, _1: 0}) || _elm_lang$core$Native_Utils.eq(
 				{ctor: '_Tuple2', _0: row, _1: col},
-				{ctor: '_Tuple2', _0: 0, _1: _user$project$Main$size - 1})) ? _user$project$Main$Unselected(_user$project$Main$Blue) : ((_elm_lang$core$Native_Utils.eq(
+				{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: 0})) ? _user$project$Main$Unselected(_user$project$Main$Blue) : ((_elm_lang$core$Native_Utils.eq(
 				{ctor: '_Tuple2', _0: row, _1: col},
-				{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: 0}) || _elm_lang$core$Native_Utils.eq(
+				{ctor: '_Tuple2', _0: 0, _1: _user$project$Main$size - 1}) || _elm_lang$core$Native_Utils.eq(
 				{ctor: '_Tuple2', _0: row, _1: col},
 				{ctor: '_Tuple2', _0: _user$project$Main$size - 1, _1: _user$project$Main$size - 1})) ? _user$project$Main$Unselected(_user$project$Main$Red) : _user$project$Main$Empty);
 		});
@@ -9601,7 +9601,11 @@ var _user$project$Main$checkGameStatus = function (model) {
 		model,
 		{
 			match: _user$project$Main$updateWinner(model)
-		}) : model;
+		}) : (_elm_lang$core$Native_Utils.eq(model.amountOfRed, 0) ? _elm_lang$core$Native_Utils.update(
+		model,
+		{match: _user$project$Main$BlueWin}) : (_elm_lang$core$Native_Utils.eq(model.amountOfBlue, 0) ? _elm_lang$core$Native_Utils.update(
+		model,
+		{match: _user$project$Main$RedWin}) : model));
 };
 var _user$project$Main$RedTurn = {ctor: 'RedTurn'};
 var _user$project$Main$BlueTurn = {ctor: 'BlueTurn'};
