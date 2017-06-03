@@ -59,7 +59,7 @@ type Turn = BlueTurn
           | RedTurn
 
 size : Size
-size = 4
+size = 8
 
 initialBoard : Board
 initialBoard =
@@ -82,6 +82,7 @@ initialModel = Model initialBoard Maybe.Nothing InProgress BlueTurn 2 2
 -- UPDATE
 
 type Msg = Click Point
+         | Restart
 
 update : Msg -> Model -> Model
 update msg model =
@@ -101,6 +102,7 @@ update msg model =
                                           |> handleBlobSelection point
                   _                  -> model
             Nothing -> Debug.log "This should never happend!!!" model
+      Restart -> initialModel
 
 getTile : Point -> Board -> Maybe Tile
 getTile point board =
@@ -386,15 +388,19 @@ calculateDistance p1 p2 =
 
 view : Model -> Html Msg
 view model =
- case model.match of
-   BlueWin ->
-      defaultViewWithContent [h2 [] [text "Blue wins!"]]
-   RedWin ->
-      defaultViewWithContent [h2 [] [text "Red wins!"]]
-   Tie ->
-      defaultViewWithContent [h2 [] [text "Tie!"]]
-   InProgress ->
-      defaultViewWithContent [turnToHtml model.turn, amountToHtml model.amountOfBlue model.amountOfRed, table [] (boardToHtml model.board)]
+  let
+    restartButton = button [onClick Restart] [text "Restart"]
+    default = [amountToHtml model.amountOfBlue model.amountOfRed, table [] (boardToHtml model.board), restartButton]
+  in
+   case model.match of
+     BlueWin ->
+        defaultViewWithContent ([h2 [] [text "Blue wins!"]] ++ default)
+     RedWin ->
+        defaultViewWithContent ([h2 [] [text "Red wins!"]] ++ default)
+     Tie ->
+        defaultViewWithContent ([h2 [] [text "Tie!"]] ++ default)
+     InProgress ->
+        defaultViewWithContent ([turnToHtml model.turn] ++ default)
 
 defaultViewWithContent : List(Html Msg) -> Html Msg
 defaultViewWithContent content =
