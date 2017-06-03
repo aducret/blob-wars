@@ -17,6 +17,10 @@ type alias Transform a b = a -> b
 
 type alias IndexedTransform a b = Row -> Col -> a -> b
 
+type alias InnerReduce a b = a -> b -> b
+
+type alias OuterReduce a = a -> a -> a
+
 type alias Matrix a = List(List(a))
 
 type alias Row = Int
@@ -212,7 +216,7 @@ countBlobs blob board =
   in
     matrixReduce innerCount outerCount 0 board
 
-matrixReduce : (a -> b -> b) -> (b -> b -> b) -> b -> Matrix a -> b
+matrixReduce : InnerReduce a b -> OuterReduce b -> b -> Matrix a -> b
 matrixReduce innerReduce outerReduce initialValue matrix =
   List.foldr (\row acum -> outerReduce (List.foldr innerReduce initialValue row) acum) initialValue matrix
 
