@@ -9351,7 +9351,7 @@ var _user$project$Main$updateLastSelection = F4(
 			function (row, col, tile) {
 				return _elm_lang$core$Native_Utils.eq(
 					{ctor: '_Tuple2', _0: row, _1: col},
-					p2) ? (_elm_lang$core$Native_Utils.eq(distance, 2) ? _user$project$Main$Empty : originalTile) : tile;
+					p1) ? (_elm_lang$core$Native_Utils.eq(distance, 2) ? _user$project$Main$Empty : originalTile) : tile;
 			});
 		return A2(_user$project$Main$matrixIndexedMap, update, board);
 	});
@@ -9637,15 +9637,16 @@ var _user$project$Main$handleBlobMovement = F2(
 			return _elm_lang$core$Native_Utils.update(
 				model,
 				{
-					board: A3(
-						_user$project$Main$stainArea,
+					board: A4(
+						_user$project$Main$updateLastSelection,
+						_p19,
 						point,
-						model.turn,
+						tile,
 						A3(
 							_user$project$Main$swap,
 							_p19,
 							point,
-							A4(_user$project$Main$updateLastSelection, _p19, point, tile, model.board))),
+							A3(_user$project$Main$stainArea, point, model.turn, model.board))),
 					selected: _elm_lang$core$Maybe$Nothing,
 					turn: _user$project$Main$changeTurn(model.turn)
 				});

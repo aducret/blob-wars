@@ -234,9 +234,9 @@ handleBlobMovement point model =
       Just lastSelectedpoint ->
         {  model |
            board = model.board
-                     |> updateLastSelection lastSelectedpoint point tile
+                     |> stainArea point model.turn
                      |> swap lastSelectedpoint point
-                     |> stainArea point model.turn,
+                     |> updateLastSelection lastSelectedpoint point tile,
            selected = Nothing,
            turn = changeTurn model.turn
         }
@@ -292,7 +292,7 @@ updateLastSelection p1 p2 originalTile board =
   let
     distance = calculateDistance p1 p2
     update row col tile =
-      if (row, col) == p2 then
+      if (row, col) == p1 then
         if distance == 2 then
           Empty
         else
